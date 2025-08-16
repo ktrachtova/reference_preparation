@@ -1,0 +1,267 @@
+#!/bin/bash
+# Script to create a custom piRNA database
+
+# Set up project directory
+PROJECT_DIR=$(dirname $(pwd))
+echo "Project directory: $PROJECT_DIR"
+mkdir -p $PROJECT_DIR # folder for downloaded reference files
+
+# Inputs from command line
+db1="" # RNACentral FASTA
+db2="" # piRBase FASTA
+db3="" # piRNAdb FASTA
+db4="" # NCBI FASTA
+GENOME="" # Homo_sapiens.GRCh38.dna.primary_assembly.fa
+
+# Parse command-line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --db1) db1="$2"; shift ;;   # Capture value for --db1
+        --db2) db2="$2"; shift ;;   # Capture value for --db2
+        --db3) db3="$2"; shift ;;   # Capture value for --db3
+        --db4) db4="$2"; shift ;;   # Capture value for --db4
+        --GENOME) GENOME="$2"; shift ;;   # Capture value for --GENOME
+        --help)  # Add a help flag
+            echo "Usage: $0 --db1 <file> --db2 <file> --db3 <file> --db4 <file> --GENOME <file>"
+            exit 0
+            ;;
+        *) echo "Unknown parameter passed: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+# Validate required inputs
+if [[ -z "$db1" || -z "$db2" || -z "$db3" || -z "$db4" ]]; then
+    echo "Error: All 4 database FASTA files (--db1, --db2, --db3, --db4) must be provided."
+    exit 1
+fi
+
+# Decompress db1–db4 if they are gzipped
+for var in db1 db2 db3 db4; do
+    val="${!var}"
+    if [[ "$val" == *.gz ]]; then
+        echo "Decompressing $val..."
+        gzip -d -c "$val" > "${val%.gz}"
+        eval "$var='${val%.gz}'"
+    fi
+    echo "Using $(echo "$var" | tr '[:lower:]' '[:upper:]'): ${!var}"
+done
+
+# Handle genome input
+if [ -z "$GENOME" ]; then
+    echo "🧬 Genome FASTA not provided. Downloading GRCh38..."
+    if [ ! -f "$PROJECT_DIR/databases/GRCh38.primary_assembly.genome.fa" ]; then
+        wget https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_47/GRCh38.primary_assembly.genome.fa.gz
+        gzip -d GRCh38.primary_assembly.genome.fa.gz
+        mv GRCh38.primary_assembly.genome.fa "$PROJECT_DIR/databases"
+    fi
+    GENOME="$PROJECT_DIR/databases/GRCh38.primary_assembly.genome.fa"
+else
+    if [[ "$GENOME" == *.gz ]]; then
+        echo "Decompressing genome FASTA..."
+        gunzip -c "$GENOME" > "${GENOME%.gz}"
+        GENOME="${GENOME%.gz}"
+    fi
+    echo "Using genome FASTA: $GENOME"
+fi
+
+# Activate conda environment
+# source activate /mnt/ssd/ssd_1/conda_envs/kaja_create_pirna_db
+
+# R script to create sequence logos and PSL to BED12 conversion
+PSL2BED=$(pwd)/utils/psl2bed.r
+BED2GTF=$(pwd)/utils/bed2gtf.py
+CREATE_FASTA_MMSEQS2=$(pwd)/utils/create_fasta_mmseqs2.py
+# SEQUENCE_LOGO_R=$(pwd)/utils/sequence_logos.r
+
+# Create temporary folder for intermediate files
+TMP_DIR="$(pwd)/tmp"
+mkdir -p $TMP_DIR
+
+# Output directory
+OUTPUT_DIR=${PROJECT_DIR}/reference_files/piRNA/$(date +'%Y_%m_%d')
+echo "${OUTPUT_DIR}"
+mkdir -p $OUTPUT_DIR
+
+# clean headers for RNACentral -> replace " " with "_" and remove "(" and ")"
+#echo "Cleaning RNACentral FASTA file..."
+#while IFS= read -r line; do
+#  if [[ $line == \>* ]]; then
+#    # Replace spaces with underscores
+#    line=${line// /_}
+#    # Remove '(' and ')'
+#    line=${line//\(/}
+#    line=${line//\)/}
+#  fi
+#  # Write the processed line to the output file
+#  echo "$line" >> _db1
+#done < "$db1"
+
+# clean headers for NCBI -> replace " " with "_" and remove ","
+#echo "Cleaning NCBI piRNA FASTA file..."
+#while IFS= read -r line; do
+#  if [[ $line == \>* ]]; then
+#    # Replace spaces with underscores
+#    line=${line// /_}
+#    # Remove ','
+#    line=${line//\,/}
+#  fi
+#  # Write the processed line to the output file
+#  echo "$line" >> _db4
+#done < "$db1"
+
+echo "Merging databases, converting to one-line FASTA..."
+# Merge all piRNA databases and shorten name
+cat $db1 $db2 $db3 $db4 | cut -d ' ' -f1 - > $TMP_DIR/_tmp
+
+# In case FASTA is multiline, change to oneline
+awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' $TMP_DIR/_tmp > $TMP_DIR/tmp.oneline
+
+# Remove sequences with Ns
+echo ""
+echo "-----------------------------"
+echo "Removing sequences with Ns..."
+docker run --rm \
+    -v "${TMP_DIR}:/data" \
+    ktrachtok/reference_preparation:latest \
+    cutadapt --max-n 0 -o /data/tmp.filtered.fa /data/tmp.oneline
+
+# Remove redundant sequences
+echo ""
+echo "-------------------------------"
+echo "Removing redundant sequences..."
+
+docker run --rm \
+    -v "${TMP_DIR}:/data" \
+    ktrachtok/reference_preparation:latest \
+    bash -c "
+        /MMseqs2/build/bin/mmseqs createdb /data/tmp.filtered.fa /data/inputDB && \
+        /MMseqs2/build/bin/mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
+        /MMseqs2/build/bin/mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
+        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/cluster_result.tsv
+    "
+
+echo ""
+echo "-------------------------------"
+echo "Generating clustered FASTA file..."
+
+docker run --rm \
+    -v "${TMP_DIR}:/data" \
+    -v "${CREATE_FASTA_MMSEQS2}:/scripts/create_fasta_mmseqs2.py" \
+    ktrachtok/reference_preparation:latest \
+    python3 /scripts/create_fasta_mmseqs2.py \
+        --fasta /data/tmp.filtered.fa \
+        --mmseqs2_tsv /data/cluster_result.tsv \
+        --output /data/piRNA_db_custom.fa
+
+# DEPRECATED: Running CD-HIT to remove redundant sequences
+#docker run --rm \
+#    -v ./tmp.filtered:/data/tmp.filtered \
+#    -v $OUTPUT_DIR:/output \
+#    ktrachtok/reference_preparation:latest \
+#    /cd-hit-v4.8.1-2019-0228/cd-hit-est -i /data/tmp.filtered -c 1 -s 1 -aL 1 -aS 1 -d 0 -p 1 -g 1 -o /output/piRNA_db_custom.fa
+
+# Map piRNA to genome
+# blat $GENOME $OUTPUT_DIR/piRNA_db_custom.fa -t=dna -q=rna -maxIntron=0 -stepSize=5 -repMatch=2253 -minScore=20 -minIdentity=100 -noTrimA -out=psl $OUTPUT_DIR/piRNA_db_custom_genomeMap.psl
+echo ""
+echo "-----------------------------------------"
+echo "Alignment of piRNA sequences to genome..."
+docker run --rm \
+    -v "${TMP_DIR}:/data" \
+    -v $GENOME:/data/genome.fa \
+    ktrachtok/reference_preparation:latest \
+    ./blat /data/genome.fa /data/piRNA_db_custom.fa \
+    -t=dna -q=rna -maxIntron=0 -stepSize=5 -repMatch=2253 \
+    -minScore=20 -minIdentity=100 -noTrimA -out=psl \
+    /data/piRNA_db_custom_genomeMap.psl
+
+# Convert PSL to BED12
+# Rscript $PSL2BED $OUTPUT_DIR/piRNA_db_custom_genomeMap.psl $OUTPUT_DIR/piRNA_db_custom_genomeMap.bed $OUTPUT_DIR
+echo ""
+echo "------------------------"
+echo "Converting PSL to BED..."
+docker run --rm \
+    -v ${PSL2BED}:/scripts/psl2bed.r \
+    -v "${TMP_DIR}:/data" \
+    ktrachtok/reference_preparation:latest \
+    Rscript /scripts/psl2bed.r /data/piRNA_db_custom_genomeMap.psl /data/piRNA_db_custom_genomeMap.bed
+
+# Convert BED12 to GTF
+# python $BED2GTF -i ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.bed -o ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype piRNA
+
+# Convert BED12 to GTF
+echo ""
+echo "------------------------"
+echo "Converting BED to GTF..."
+docker run --rm \
+    -v ${BED2GTF}:/scripts/bed2gtf.py \
+    -v "${TMP_DIR}:/data" \
+    ktrachtok/reference_preparation:latest \
+    python3 /scripts/bed2gtf.py -i /data/piRNA_db_custom_genomeMap.bed -o /data/piRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype piRNA
+
+# SEQUENCE LOGOS ####
+
+# Create sequence logos
+# Rscript ${SEQUENCE_LOGO_R} $OUTPUT_DIR/piRNA_db_custom.fa $OUTPUT_DIR
+#echo ""
+#echo "----------------------------"
+#echo "Generating sequence logos..."
+#docker run --rm \
+#    -v ${SEQUENCE_LOGO_R}:/scripts/sequence_logos.r \
+#    -v ${OUTPUT_DIR}/piRNA_db_custom.fa:/data/piRNA_db_custom.fa \
+#    -v $OUTPUT_DIR:/output \
+#    reference_preparation:latest \
+#    Rscript /scripts/sequence_logos.r /data/piRNA_db_custom.fa /output
+
+# Remove 'chr' from both BED and GTF
+#sed 's/^chr//' $OUTPUT_DIR/piRNA_db_custom_genomeMap.bed > _tmp
+#mv _tmp $OUTPUT_DIR/piRNA_db_custom_genomeMap.bed
+
+#sed 's/^chr//' $OUTPUT_DIR/piRNA_db_custom_genomeMap.gtf > _tmp
+#mv _tmp $OUTPUT_DIR/piRNA_db_custom_genomeMap.gtf
+
+# STATISTICS OF DATABASES ####
+echo ""
+echo "------------------------"
+echo "Generating statistics..."
+# Get number of sequences in every source database
+echo "$(basename $db1),`grep -c ">" $db1`" > $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $db2),`grep -c ">" $db2`" >> $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $db3),`grep -c ">" $db3`" >> $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $db4),`grep -c ">" $db4`" >> $OUTPUT_DIR/pirna_databases.csv
+
+# Get number of sequences after cleaning
+echo "DB_Nclean,`grep -c ">" ${TMP_DIR}/tmp.filtered.fa`" >> $OUTPUT_DIR/pirna_databases.csv
+
+# Get number of sequences after removing redundant piRNA sequences
+echo "DB_uniqueSeq,`grep -c ">" $TMP_DIR/piRNA_db_custom.fa`" >> $OUTPUT_DIR/pirna_databases.csv
+
+# Get number of piRNA that aligned to genome (with custom BLAT settings)
+echo "DB_piRNAMapAll,$(( `cut -f10 $TMP_DIR/piRNA_db_custom_genomeMap.psl | sort | uniq | wc -l`-5))" >> $OUTPUT_DIR/pirna_databases.csv
+
+# Get number of piRNA that aligned to genome without any softclipping (full alignment)
+echo "DB_piRNAMapNoClipping,`cut -f4 $TMP_DIR/piRNA_db_custom_genomeMap.bed | sort | uniq | wc -l`" >> $OUTPUT_DIR/pirna_databases.csv
+
+# Length distribution of final piRNA database
+echo "piRNA_length piRNA_number" > $OUTPUT_DIR/pirna_database_lenDist.csv
+cat $TMP_DIR/piRNA_db_custom.fa | awk 'NR%2 == 0 {lengths[length($0)]++} END {for (l in lengths) {print l, lengths[l]}}' >> $OUTPUT_DIR/pirna_database_lenDist.csv
+
+# Calculate minimum, maximum, and average lengths
+MIN_LENGTH=$(awk '/^>/ {if (seqlen) print seqlen; seqlen=0; next} {seqlen += length($0)} END {print seqlen}' "$TMP_DIR/piRNA_db_custom.fa" | sort -n | head -n 1)
+MAX_LENGTH=$(awk '/^>/ {if (seqlen) print seqlen; seqlen=0; next} {seqlen += length($0)} END {print seqlen}' "$TMP_DIR/piRNA_db_custom.fa" | sort -n | tail -n 1)
+AVG_LENGTH=$(awk '/^>/ {if (seqlen) {sum += seqlen; count++} seqlen=0; next} {seqlen += length($0)} END {print sum/count}' "$TMP_DIR/piRNA_db_custom.fa")
+NUM_SEQ=`grep -c ">" $TMP_DIR/piRNA_db_custom.fa`
+
+# Print the results
+echo "Number of piRNA sequences: $NUM_SEQ"
+echo "Minimum length: $MIN_LENGTH"
+echo "Maximum length: $MAX_LENGTH"
+echo "Average length: $AVG_LENGTH"
+
+cp ${TMP_DIR}/piRNA_db_custom.fa ${OUTPUT_DIR}/piRNA_db_custom.fa
+cp ${TMP_DIR}/piRNA_db_custom_genomeMap.gtf ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.gtf
+cp ${TMP_DIR}/piRNA_db_custom_genomeMap.bed ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.bed
+cp ${TMP_DIR}/piRNA_db_custom_genomeMap.psl ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.psl
+
+# Cleaning
+rm -rf $TMP_DIR
