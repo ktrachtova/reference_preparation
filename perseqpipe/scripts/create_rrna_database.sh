@@ -88,7 +88,7 @@ docker run --rm \
         /MMseqs2/build/bin/mmseqs createdb /data/tmp.fa /data/inputDB && \
         /MMseqs2/build/bin/mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
         /MMseqs2/build/bin/mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
-        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/cluster_result.tsv
+        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/rRNA_cluster_result.tsv
     "
 
 echo ""
@@ -101,7 +101,7 @@ docker run --rm \
     ktrachtok/reference_preparation:latest \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.fa \
-        --mmseqs2_tsv /data/cluster_result.tsv \
+        --mmseqs2_tsv /data/rRNA_cluster_result.tsv \
         --output /data/rRNA_db_custom.fa
 
 
@@ -123,6 +123,7 @@ echo "Maximum length: $MAX_LENGTH"
 echo "Average length: $AVG_LENGTH"
 
 cp ${TMP_DIR}/rRNA_db_custom.fa ${OUTPUT_DIR}/rRNA_db_custom.fa
+cp ${TMP_DIR}/rRNA_cluster_result.tsv ${OUTPUT_DIR}/rRNA_cluster_result.tsv
 
 # Cleaning
 rm -rf $TMP_DIR
