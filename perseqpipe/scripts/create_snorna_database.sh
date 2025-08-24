@@ -5,9 +5,9 @@ PROJECT_DIR=$(dirname $(pwd))
 echo "Project directory: $PROJECT_DIR"
 mkdir -p $PROJECT_DIR # folder for downloaded reference files
 
-DB1=""
-DB2=""
-GENOME=""
+DB1=""  # RNACentral FASTA
+DB2=""  # Gencode FASTA
+GENOME=""  # GRCh38.primary_assembly.genome.fa 
 
 # Activate conda environment
 # source activate /mnt/ssd/ssd_1/conda_envs/kaja_create_pirna_db
@@ -116,7 +116,7 @@ docker run --rm \
         /MMseqs2/build/bin/mmseqs createdb /data/tmp.fa /data/inputDB && \
         /MMseqs2/build/bin/mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
         /MMseqs2/build/bin/mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
-        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/cluster_result.tsv
+        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/snoRNA_cluster_result.tsv
     "
 
 echo ""
@@ -129,8 +129,9 @@ docker run --rm \
     ktrachtok/reference_preparation:latest \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.fa \
-        --mmseqs2_tsv /data/cluster_result.tsv \
-        --output /data/snoRNA_db_custom.fa
+        --mmseqs2_tsv /data/snoRNA_cluster_result.tsv \
+        --output /data/snoRNA_db_custom.fa \
+        --merge_headers
 
 #docker run --rm \
 #    -v $(pwd)/$TMP_DIR/tmp.fa:/data/tmp.fa \
@@ -179,7 +180,7 @@ docker run --rm \
     -v ${BED2GTF}:/scripts/bed2gtf.py \
     -v "${TMP_DIR}:/data" \
     ktrachtok/reference_preparation:latest \
-    python3 /scripts/bed2gtf.py -i /data/snoRNA_db_custom_genomeMap.bed -o /data/snoRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype snoRNA
+    python3 /scripts/bed2gtf.py -i /data/snoRNA_db_custom_genomeMap.bed -o /data/snoRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype snoRNA --source snoRNA_custom_db
 
 #echo ""
 #echo "------------------------------------------------------------"
@@ -210,7 +211,7 @@ echo "Average length: $AVG_LENGTH"
 
 # Calculate number of snoRNA sequences in source databases as well as the final database
 echo "$(basename $DB1),`grep -c ">" $DB1`" > ${OUTPUT_DIR}/snorna_databases.csv
-echo "$(basename $DB2),`grep -c ">" ${TMP_DIR}/db2_Ts_snoRNA_`" >> ${OUTPUT_DIR}/snorna_databases.csv
+echo "$(basename $DB2),`grep -c ">" ${TMP_DIR}/db2_snoRNA_`" >> ${OUTPUT_DIR}/snorna_databases.csv
 
 echo "DB_allSeq, `grep -c ">" $TMP_DIR/tmp.fa`" >> ${OUTPUT_DIR}/snorna_databases.csv
 echo "DB_uniqueSeq,`grep -c ">" ${TMP_DIR}/snoRNA_db_custom.fa`" >> ${OUTPUT_DIR}/snorna_databases.csv
@@ -222,6 +223,7 @@ cat ${TMP_DIR}/snoRNA_db_custom.fa | awk 'NR%2 == 0 {lengths[length($0)]++} END 
 echo "Done."
 
 cp ${TMP_DIR}/snoRNA_db_custom.fa ${OUTPUT_DIR}/snoRNA_db_custom.fa
+cp ${TMP_DIR}/snoRNA_cluster_result.tsv ${OUTPUT_DIR}/snoRNA_cluster_result.tsv
 cp ${TMP_DIR}/snoRNA_db_custom_genomeMap.gtf ${OUTPUT_DIR}/snoRNA_db_custom_genomeMap.gtf
 cp ${TMP_DIR}/snoRNA_db_custom_genomeMap.bed ${OUTPUT_DIR}/snoRNA_db_custom_genomeMap.bed
 cp ${TMP_DIR}/snoRNA_db_custom_genomeMap.psl ${OUTPUT_DIR}/snoRNA_db_custom_genomeMap.psl

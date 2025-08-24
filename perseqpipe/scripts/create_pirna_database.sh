@@ -7,22 +7,22 @@ echo "Project directory: $PROJECT_DIR"
 mkdir -p $PROJECT_DIR # folder for downloaded reference files
 
 # Inputs from command line
-db1="" # RNACentral FASTA
-db2="" # piRBase FASTA
-db3="" # piRNAdb FASTA
-db4="" # NCBI FASTA
+DB1="" # RNACentral FASTA
+DB2="" # piRBase FASTA
+DB3="" # piRNAdb FASTA
+DB4="" # NCBI FASTA
 GENOME="" # Homo_sapiens.GRCh38.dna.primary_assembly.fa
 
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --db1) db1="$2"; shift ;;   # Capture value for --db1
-        --db2) db2="$2"; shift ;;   # Capture value for --db2
-        --db3) db3="$2"; shift ;;   # Capture value for --db3
-        --db4) db4="$2"; shift ;;   # Capture value for --db4
+        --DB1) DB1="$2"; shift ;;   # Capture value for --db1
+        --DB2) DB2="$2"; shift ;;   # Capture value for --db2
+        --DB3) DB3="$2"; shift ;;   # Capture value for --db3
+        --DB4) DB4="$2"; shift ;;   # Capture value for --db4
         --GENOME) GENOME="$2"; shift ;;   # Capture value for --GENOME
         --help)  # Add a help flag
-            echo "Usage: $0 --db1 <file> --db2 <file> --db3 <file> --db4 <file> --GENOME <file>"
+            echo "Usage: $0 --DB1 <file> --DB2 <file> --DB3 <file> --DB4 <file> --GENOME <file>"
             exit 0
             ;;
         *) echo "Unknown parameter passed: $1"; exit 1 ;;
@@ -31,13 +31,13 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # Validate required inputs
-if [[ -z "$db1" || -z "$db2" || -z "$db3" || -z "$db4" ]]; then
-    echo "Error: All 4 database FASTA files (--db1, --db2, --db3, --db4) must be provided."
+if [[ -z "$DB1" || -z "$DB2" || -z "$DB3" || -z "$DB4" ]]; then
+    echo "Error: All 4 database FASTA files (--DB1, --DB2, --DB3, --DB4) must be provided."
     exit 1
 fi
 
 # Decompress db1–db4 if they are gzipped
-for var in db1 db2 db3 db4; do
+for var in DB1 DB2 DB3 DB4; do
     val="${!var}"
     if [[ "$val" == *.gz ]]; then
         echo "Decompressing $val..."
@@ -112,7 +112,7 @@ mkdir -p $OUTPUT_DIR
 
 echo "Merging databases, converting to one-line FASTA..."
 # Merge all piRNA databases and shorten name
-cat $db1 $db2 $db3 $db4 | cut -d ' ' -f1 - > $TMP_DIR/_tmp
+cat $DB1 $DB2 $DB3 $DB3 | cut -d ' ' -f1 - > $TMP_DIR/_tmp
 
 # In case FASTA is multiline, change to oneline
 awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' $TMP_DIR/_tmp > $TMP_DIR/tmp.oneline
@@ -138,7 +138,7 @@ docker run --rm \
         /MMseqs2/build/bin/mmseqs createdb /data/tmp.filtered.fa /data/inputDB && \
         /MMseqs2/build/bin/mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
         /MMseqs2/build/bin/mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
-        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/cluster_result.tsv
+        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/piRNA_cluster_result.tsv
     "
 
 echo ""
@@ -151,8 +151,9 @@ docker run --rm \
     ktrachtok/reference_preparation:latest \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.filtered.fa \
-        --mmseqs2_tsv /data/cluster_result.tsv \
-        --output /data/piRNA_db_custom.fa
+        --mmseqs2_tsv /data/piRNA_cluster_result.tsv \
+        --output /data/piRNA_db_custom.fa \
+        --merge_headers
 
 # DEPRECATED: Running CD-HIT to remove redundant sequences
 #docker run --rm \
@@ -197,7 +198,7 @@ docker run --rm \
     -v ${BED2GTF}:/scripts/bed2gtf.py \
     -v "${TMP_DIR}:/data" \
     ktrachtok/reference_preparation:latest \
-    python3 /scripts/bed2gtf.py -i /data/piRNA_db_custom_genomeMap.bed -o /data/piRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype piRNA
+    python3 /scripts/bed2gtf.py -i /data/piRNA_db_custom_genomeMap.bed -o /data/piRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype piRNA --source piRNA_custom_db
 
 # SEQUENCE LOGOS ####
 
@@ -225,10 +226,10 @@ echo ""
 echo "------------------------"
 echo "Generating statistics..."
 # Get number of sequences in every source database
-echo "$(basename $db1),`grep -c ">" $db1`" > $OUTPUT_DIR/pirna_databases.csv
-echo "$(basename $db2),`grep -c ">" $db2`" >> $OUTPUT_DIR/pirna_databases.csv
-echo "$(basename $db3),`grep -c ">" $db3`" >> $OUTPUT_DIR/pirna_databases.csv
-echo "$(basename $db4),`grep -c ">" $db4`" >> $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $DB1),`grep -c ">" $DB1`" > $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $DB2),`grep -c ">" $DB2`" >> $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $DB3),`grep -c ">" $DB3`" >> $OUTPUT_DIR/pirna_databases.csv
+echo "$(basename $DB4),`grep -c ">" $DB4`" >> $OUTPUT_DIR/pirna_databases.csv
 
 # Get number of sequences after cleaning
 echo "DB_Nclean,`grep -c ">" ${TMP_DIR}/tmp.filtered.fa`" >> $OUTPUT_DIR/pirna_databases.csv
@@ -237,7 +238,7 @@ echo "DB_Nclean,`grep -c ">" ${TMP_DIR}/tmp.filtered.fa`" >> $OUTPUT_DIR/pirna_d
 echo "DB_uniqueSeq,`grep -c ">" $TMP_DIR/piRNA_db_custom.fa`" >> $OUTPUT_DIR/pirna_databases.csv
 
 # Get number of piRNA that aligned to genome (with custom BLAT settings)
-echo "DB_piRNAMapAll,$(( `cut -f10 $TMP_DIR/piRNA_db_custom_genomeMap.psl | sort | uniq | wc -l`-5))" >> $OUTPUT_DIR/pirna_databases.csv
+echo "DB_piRNAMapAll,$((`cut -f10 $TMP_DIR/piRNA_db_custom_genomeMap.psl | sort | uniq | wc -l`-5))" >> $OUTPUT_DIR/pirna_databases.csv
 
 # Get number of piRNA that aligned to genome without any softclipping (full alignment)
 echo "DB_piRNAMapNoClipping,`cut -f4 $TMP_DIR/piRNA_db_custom_genomeMap.bed | sort | uniq | wc -l`" >> $OUTPUT_DIR/pirna_databases.csv
@@ -259,6 +260,7 @@ echo "Maximum length: $MAX_LENGTH"
 echo "Average length: $AVG_LENGTH"
 
 cp ${TMP_DIR}/piRNA_db_custom.fa ${OUTPUT_DIR}/piRNA_db_custom.fa
+cp ${TMP_DIR}/piRNA_cluster_result.tsv ${OUTPUT_DIR}/piRNA_cluster_result.tsv
 cp ${TMP_DIR}/piRNA_db_custom_genomeMap.gtf ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.gtf
 cp ${TMP_DIR}/piRNA_db_custom_genomeMap.bed ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.bed
 cp ${TMP_DIR}/piRNA_db_custom_genomeMap.psl ${OUTPUT_DIR}/piRNA_db_custom_genomeMap.psl

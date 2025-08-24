@@ -85,11 +85,13 @@ echo ""
 echo "--------------------------"
 echo "Cleaning tRNA sequences..."
 
-# Extract only Mt-tRNA sequences from GENCODE
-grep -A 1 "Mt_tRNA" "$DB1" | grep -v "^--" > $TMP_DIR/gencode.mt_tRNA.fa
+# FASTA multiline to one line for Gencode
+awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' "$DB1" > ${TMP_DIR}/gencode.mt_tRNA.oneline.fa
 
-# FASTA multiline to one line
-awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' $TMP_DIR/gencode.mt_tRNA.fa > ${TMP_DIR}/mt_tRNA_db.fa
+# Extract only Mt-tRNA sequences from GENCODE
+grep -A 1 "Mt_tRNA" ${TMP_DIR}/gencode.mt_tRNA.oneline.fa | grep -v "^--" > $TMP_DIR/mt_tRNA_db.fa
+
+# FASTA multiline to one line for GtRNAdb
 awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' "$DB2_FASTA1" > ${TMP_DIR}/tmp1_
 awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' "$DB2_FASTA2" > ${TMP_DIR}/tmp2_
 
@@ -148,7 +150,7 @@ docker run --rm \
     -v ${BED2GTF}:/scripts/bed2gtf.py \
     -v "${TMP_DIR}:/data" \
     ktrachtok/reference_preparation:latest \
-    python3 /scripts/bed2gtf.py -i /data/tRNA_db_custom_genomeMap.bed -o /data/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA
+    python3 /scripts/bed2gtf.py -i /data/tRNA_db_custom_genomeMap.bed -o /data/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA --source GtRNAdb
 
 #python $BED2GTF -i ${OUTPUT_DIR}/tRNA_db_custom_genomeMap.bed -o ${OUTPUT_DIR}/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA
 #echo ""
@@ -192,5 +194,3 @@ cp ${TMP_DIR}/mt_tRNA_db_genomeMap.bed ${OUTPUT_DIR}/mt_tRNA_db_genomeMap.bed
 
 # Cleaning
 rm -rf $TMP_DIR
-
-
