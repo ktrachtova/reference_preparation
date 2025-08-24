@@ -71,12 +71,6 @@ process_fasta "$DB2" ${TMP_DIR}/"_db2_cleaned.fa"
 
 cat ${TMP_DIR}/_db1_cleaned.fa ${TMP_DIR}/_db2_cleaned.fa > ${TMP_DIR}/tmp.fa
 
-#docker run --rm \
-#    -v "$(pwd)/tmp.fa:/data/tmp.fa" \
-#    -v "$OUTPUT_DIR:/output" \
-#    ktrachtok/reference_preparation:latest \
-#    /cd-hit-v4.8.1-2019-0228/cd-hit-est -i /data/tmp.fa -c 1 -s 1 -aL 1 -aS 1 -d 0 -p 1 -g 1 -o /output/rRNA_db_custom.fa
-
 echo ""
 echo "-------------------------------"
 echo "Clustering with MMseqs2..."

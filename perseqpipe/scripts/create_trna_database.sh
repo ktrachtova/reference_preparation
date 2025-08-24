@@ -112,7 +112,6 @@ awk 'BEGIN { OFS="\n" } \
 mv ${TMP_DIR}/tmp2_.tmp ${TMP_DIR}/tmp2_
 
 # Map Mt-tRNA to genome wtih BLAT
-# blat $GENOME ${OUTPUT_DIR}/mt_tRNA_db.fa -t=dna -q=rna -maxIntron=10000 -stepSize=5 -repMatch=1000 -minScore=20 -minIdentity=100 -noTrimA -out=psl ${OUTPUT_DIR}/mt_tRNA_db_genomeMap.psl
 echo ""
 echo "------------------------------------"
 echo "Aligning tRNA sequences to genome..."
@@ -138,7 +137,6 @@ docker run --rm \
     Rscript /scripts/psl2bed.r /data/mt_tRNA_db_genomeMap.psl /data/mt_tRNA_db_genomeMap.bed
 
 # Merge GtfRNAdb BED12 file with tRNA with created BED12 file with Mt-tRNA
-#cat ${OUTPUT_DIR}/mt_tRNA_db_genomeMap.bed $OUTPUT_DIR/${DB2_NAME%.bed}.replacedChromosome.bed > ${OUTPUT_DIR}/tRNA_db_custom_genomeMap.bed
 cat ${TMP_DIR}/mt_tRNA_db_genomeMap.bed $DB2 > ${TMP_DIR}/tRNA_db_custom_genomeMap.bed
 
 # Convert BED12 to GTF
@@ -151,17 +149,6 @@ docker run --rm \
     -v "${TMP_DIR}:/data" \
     ktrachtok/reference_preparation:latest \
     python3 /scripts/bed2gtf.py -i /data/tRNA_db_custom_genomeMap.bed -o /data/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA --source GtRNAdb
-
-#python $BED2GTF -i ${OUTPUT_DIR}/tRNA_db_custom_genomeMap.bed -o ${OUTPUT_DIR}/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA
-#echo ""
-#echo "------------------------------------------------------------"
-#echo "Renaming chromosomes ('1' instead of 'chr1') for BED and GTF"
-#
-#sed 's/^chr//' $OUTPUT_DIR/tRNA_db_custom_genomeMap.bed > _tmp
-#mv _tmp $OUTPUT_DIR/tRNA_db_custom_genomeMap.bed
-#
-#sed 's/^chr//' $OUTPUT_DIR/tRNA_db_custom_genomeMap.gtf > _tmp
-#mv _tmp $OUTPUT_DIR/tRNA_db_custom_genomeMap.gtf
 
 # Length distribution of final tRNA database
 echo ""

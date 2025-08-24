@@ -7,9 +7,6 @@ mkdir -p $PROJECT_DIR # folder for downloaded reference files
 
 GTF=""  # Gencode GTF file, example: gencode.v47.primary_assembly.annotation.gtf
 
-# Activate conda environment
-# source activate /mnt/ssd/ssd_1/conda_envs/kaja_create_pirna_db
-
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in

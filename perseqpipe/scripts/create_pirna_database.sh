@@ -65,9 +65,6 @@ else
     echo "Using genome FASTA: $GENOME"
 fi
 
-# Activate conda environment
-# source activate /mnt/ssd/ssd_1/conda_envs/kaja_create_pirna_db
-
 # R script to create sequence logos and PSL to BED12 conversion
 PSL2BED=$(pwd)/utils/psl2bed.r
 BED2GTF=$(pwd)/utils/bed2gtf.py
@@ -82,33 +79,6 @@ mkdir -p $TMP_DIR
 OUTPUT_DIR=${PROJECT_DIR}/reference_files/piRNA/$(date +'%Y_%m_%d')
 echo "${OUTPUT_DIR}"
 mkdir -p $OUTPUT_DIR
-
-# clean headers for RNACentral -> replace " " with "_" and remove "(" and ")"
-#echo "Cleaning RNACentral FASTA file..."
-#while IFS= read -r line; do
-#  if [[ $line == \>* ]]; then
-#    # Replace spaces with underscores
-#    line=${line// /_}
-#    # Remove '(' and ')'
-#    line=${line//\(/}
-#    line=${line//\)/}
-#  fi
-#  # Write the processed line to the output file
-#  echo "$line" >> _db1
-#done < "$db1"
-
-# clean headers for NCBI -> replace " " with "_" and remove ","
-#echo "Cleaning NCBI piRNA FASTA file..."
-#while IFS= read -r line; do
-#  if [[ $line == \>* ]]; then
-#    # Replace spaces with underscores
-#    line=${line// /_}
-#    # Remove ','
-#    line=${line//\,/}
-#  fi
-#  # Write the processed line to the output file
-#  echo "$line" >> _db4
-#done < "$db1"
 
 echo "Merging databases, converting to one-line FASTA..."
 # Merge all piRNA databases and shorten name
@@ -155,13 +125,6 @@ docker run --rm \
         --output /data/piRNA_db_custom.fa \
         --merge_headers
 
-# DEPRECATED: Running CD-HIT to remove redundant sequences
-#docker run --rm \
-#    -v ./tmp.filtered:/data/tmp.filtered \
-#    -v $OUTPUT_DIR:/output \
-#    ktrachtok/reference_preparation:latest \
-#    /cd-hit-v4.8.1-2019-0228/cd-hit-est -i /data/tmp.filtered -c 1 -s 1 -aL 1 -aS 1 -d 0 -p 1 -g 1 -o /output/piRNA_db_custom.fa
-
 # Map piRNA to genome
 # blat $GENOME $OUTPUT_DIR/piRNA_db_custom.fa -t=dna -q=rna -maxIntron=0 -stepSize=5 -repMatch=2253 -minScore=20 -minIdentity=100 -noTrimA -out=psl $OUTPUT_DIR/piRNA_db_custom_genomeMap.psl
 echo ""
@@ -199,27 +162,6 @@ docker run --rm \
     -v "${TMP_DIR}:/data" \
     ktrachtok/reference_preparation:latest \
     python3 /scripts/bed2gtf.py -i /data/piRNA_db_custom_genomeMap.bed -o /data/piRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype piRNA --source piRNA_custom_db
-
-# SEQUENCE LOGOS ####
-
-# Create sequence logos
-# Rscript ${SEQUENCE_LOGO_R} $OUTPUT_DIR/piRNA_db_custom.fa $OUTPUT_DIR
-#echo ""
-#echo "----------------------------"
-#echo "Generating sequence logos..."
-#docker run --rm \
-#    -v ${SEQUENCE_LOGO_R}:/scripts/sequence_logos.r \
-#    -v ${OUTPUT_DIR}/piRNA_db_custom.fa:/data/piRNA_db_custom.fa \
-#    -v $OUTPUT_DIR:/output \
-#    reference_preparation:latest \
-#    Rscript /scripts/sequence_logos.r /data/piRNA_db_custom.fa /output
-
-# Remove 'chr' from both BED and GTF
-#sed 's/^chr//' $OUTPUT_DIR/piRNA_db_custom_genomeMap.bed > _tmp
-#mv _tmp $OUTPUT_DIR/piRNA_db_custom_genomeMap.bed
-
-#sed 's/^chr//' $OUTPUT_DIR/piRNA_db_custom_genomeMap.gtf > _tmp
-#mv _tmp $OUTPUT_DIR/piRNA_db_custom_genomeMap.gtf
 
 # STATISTICS OF DATABASES ####
 echo ""

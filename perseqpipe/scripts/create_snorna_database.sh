@@ -9,9 +9,6 @@ DB1=""  # RNACentral FASTA
 DB2=""  # Gencode FASTA
 GENOME=""  # GRCh38.primary_assembly.genome.fa 
 
-# Activate conda environment
-# source activate /mnt/ssd/ssd_1/conda_envs/kaja_create_pirna_db
-
 # Parse command-line arguments
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -133,15 +130,6 @@ docker run --rm \
         --output /data/snoRNA_db_custom.fa \
         --merge_headers
 
-#docker run --rm \
-#    -v $(pwd)/$TMP_DIR/tmp.fa:/data/tmp.fa \
-#    -v $OUTPUT_DIR:/output \
-#    ktrachtok/reference_preparation:latest \
-#    /cd-hit-v4.8.1-2019-0228/cd-hit-est -i /data/tmp.fa -c 1 -s 1 -aL 1 -aS 1 -d 0 -p 1 -g 1 -o /output/snoRNA_db_custom.fa
-
-# Remove snoRNA host gene sequences or sequences that do not match snoRNA biology -> selected manually after visual inspection
-# awk 'NR==FNR{a[$0]; next} {found=0; for (pattern in a) { if (index($0, pattern) == 1) {found=1; break;} } if (found) {getline; next} } 1' $REMOVE_SEQ_FILE ${OUTPUT_DIR}/snoRNA_db_custom.fa > temp && mv temp ${OUTPUT_DIR}/snoRNA_db_custom.fa
-
 echo ""
 echo "--------------------------------------"
 echo "Aligning snoRNA sequences to genome..."
@@ -181,16 +169,6 @@ docker run --rm \
     -v "${TMP_DIR}:/data" \
     ktrachtok/reference_preparation:latest \
     python3 /scripts/bed2gtf.py -i /data/snoRNA_db_custom_genomeMap.bed -o /data/snoRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype snoRNA --source snoRNA_custom_db
-
-#echo ""
-#echo "------------------------------------------------------------"
-#echo "Renaming chromosomes ('1' instead of 'chr1') for BED and GTF"
-
-#sed 's/^chr//' $OUTPUT_DIR/snoRNA_db_custom_genomeMap.bed > _tmp
-#mv _tmp $OUTPUT_DIR/snoRNA_db_custom_genomeMap.bed
-
-#sed 's/^chr//' $OUTPUT_DIR/snoRNA_db_custom_genomeMap.gtf > _tmp
-#mv _tmp $OUTPUT_DIR/snoRNA_db_custom_genomeMap.gtf
 
 # Calculate and print some statistics about created snoRNA database
 echo ""
