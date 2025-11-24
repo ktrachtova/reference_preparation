@@ -89,7 +89,12 @@ echo "Cleaning tRNA sequences..."
 awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' "$DB1" > ${TMP_DIR}/gencode.mt_tRNA.oneline.fa
 
 # Extract only Mt-tRNA sequences from GENCODE
-grep -A 1 "Mt_tRNA" ${TMP_DIR}/gencode.mt_tRNA.oneline.fa | grep -v "^--" > $TMP_DIR/mt_tRNA_db.fa
+grep -A 1 "Mt_tRNA" ${TMP_DIR}/gencode.mt_tRNA.oneline.fa | grep -v "^--" > $TMP_DIR/mt_tRNA_seq.fa
+
+# The Mt-tRNA sequences contain "|" in their headers, we need to replace the pipe with "_"
+# as the "|" is a separator for IDs from multiple databases for the same sequence in the sncRNA GTF file;
+# see https://github.com/ktrachtova/perseqpipe/blob/main/docs/annotation_preparation.md#sncrna-gtf-file-format
+sed '/^>/{ s/|$//; s/|/_/g; }' "$TMP_DIR/mt_tRNA_seq.fa" > "$TMP_DIR/mt_tRNA_db.fa"
 
 # FASTA multiline to one line for GtRNAdb
 awk '/^>/ { if(NR>1) print "";  printf("%s\n",$0); next; } { printf("%s",$0);}  END {printf("\n");}' "$DB2_FASTA1" > ${TMP_DIR}/tmp1_
@@ -119,7 +124,7 @@ echo "Aligning tRNA sequences to genome..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v $GENOME:/data/genome.fa \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-1.0 \
     ./blat /data/genome.fa /data/mt_tRNA_db.fa \
     -t=dna -q=rna -maxIntron=10000 -stepSize=5 -repMatch=1000 \
     -minScore=20 -minIdentity=100 -noTrimA -out=psl \
@@ -133,7 +138,7 @@ echo "Converting PSL to BED"
 docker run --rm \
     -v ${PSL2BED}:/scripts/psl2bed.r \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-1.0 \
     Rscript /scripts/psl2bed.r /data/mt_tRNA_db_genomeMap.psl /data/mt_tRNA_db_genomeMap.bed
 
 # Merge GtfRNAdb BED12 file with tRNA with created BED12 file with Mt-tRNA
@@ -147,7 +152,7 @@ echo "Converting BED to GTF"
 docker run --rm \
     -v ${BED2GTF}:/scripts/bed2gtf.py \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-1.0 \
     python3 /scripts/bed2gtf.py -i /data/tRNA_db_custom_genomeMap.bed -o /data/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA --source GtRNAdb
 
 # Length distribution of final tRNA database

@@ -1,9 +1,12 @@
 #!/bin/bash
 # Script to create a custom rRNA database
 
+source ../config.mk
+
 # Set up project directory
 PROJECT_DIR=$(dirname "$(pwd)")
 echo "Project directory: $PROJECT_DIR"
+echo "Docker image version: $REFERENCE_PREPARATION_VERSION"
 
 CREATE_FASTA_MMSEQS2=$(pwd)/utils/create_fasta_mmseqs2.py
 
@@ -77,12 +80,12 @@ echo "Clustering with MMseqs2..."
 
 docker run --rm \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     bash -c "
-        /MMseqs2/build/bin/mmseqs createdb /data/tmp.fa /data/inputDB && \
-        /MMseqs2/build/bin/mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
-        /MMseqs2/build/bin/mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
-        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/rRNA_cluster_result.tsv
+        mmseqs createdb /data/tmp.fa /data/inputDB && \
+        mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
+        mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
+        mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/rRNA_cluster_result.tsv
     "
 
 echo ""
@@ -92,7 +95,7 @@ echo "Generating clustered FASTA file..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v ${CREATE_FASTA_MMSEQS2}:/scripts/create_fasta_mmseqs2.py \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.fa \
         --mmseqs2_tsv /data/rRNA_cluster_result.tsv \

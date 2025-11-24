@@ -1,10 +1,13 @@
 #!/bin/bash
 # Script to create a custom piRNA database
 
+source ../config.mk
+
 # Set up project directory
 PROJECT_DIR=$(dirname $(pwd))
 echo "Project directory: $PROJECT_DIR"
 mkdir -p $PROJECT_DIR # folder for downloaded reference files
+echo "Docker image version: $REFERENCE_PREPARATION_VERSION"
 
 # Inputs from command line
 DB1="" # RNACentral FASTA
@@ -93,7 +96,7 @@ echo "-----------------------------"
 echo "Removing sequences with Ns..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     cutadapt --max-n 0 -o /data/tmp.filtered.fa /data/tmp.oneline
 
 # Remove redundant sequences
@@ -103,12 +106,12 @@ echo "Removing redundant sequences..."
 
 docker run --rm \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     bash -c "
-        /MMseqs2/build/bin/mmseqs createdb /data/tmp.filtered.fa /data/inputDB && \
-        /MMseqs2/build/bin/mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
-        /MMseqs2/build/bin/mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
-        /MMseqs2/build/bin/mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/piRNA_cluster_result.tsv
+        mmseqs createdb /data/tmp.filtered.fa /data/inputDB && \
+        mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
+        mmseqs clust /data/inputDB /data/resultDB /data/clusterDB && \
+        mmseqs createtsv /data/inputDB /data/inputDB /data/clusterDB /data/piRNA_cluster_result.tsv
     "
 
 echo ""
@@ -118,7 +121,7 @@ echo "Generating clustered FASTA file..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v "${CREATE_FASTA_MMSEQS2}:/scripts/create_fasta_mmseqs2.py" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64="${REFERENCE_PREPARATION_VERSION}" \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.filtered.fa \
         --mmseqs2_tsv /data/piRNA_cluster_result.tsv \
@@ -133,7 +136,7 @@ echo "Alignment of piRNA sequences to genome..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v $GENOME:/data/genome.fa \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     ./blat /data/genome.fa /data/piRNA_db_custom.fa \
     -t=dna -q=rna -maxIntron=0 -stepSize=5 -repMatch=2253 \
     -minScore=20 -minIdentity=100 -noTrimA -out=psl \
@@ -147,7 +150,7 @@ echo "Converting PSL to BED..."
 docker run --rm \
     -v ${PSL2BED}:/scripts/psl2bed.r \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     Rscript /scripts/psl2bed.r /data/piRNA_db_custom_genomeMap.psl /data/piRNA_db_custom_genomeMap.bed
 
 # Convert BED12 to GTF
@@ -160,7 +163,7 @@ echo "Converting BED to GTF..."
 docker run --rm \
     -v ${BED2GTF}:/scripts/bed2gtf.py \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:latest \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
     python3 /scripts/bed2gtf.py -i /data/piRNA_db_custom_genomeMap.bed -o /data/piRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype piRNA --source piRNA_custom_db
 
 # STATISTICS OF DATABASES ####
