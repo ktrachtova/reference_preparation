@@ -122,7 +122,7 @@ echo "Generating clustered FASTA file..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v "${CREATE_FASTA_MMSEQS2}:/scripts/create_fasta_mmseqs2.py" \
-    ktrachtok/reference_preparation:x86_64="${REFERENCE_PREPARATION_DOCKER_VERSION}" \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.filtered.fa \
         --mmseqs2_tsv /data/piRNA_cluster_result.tsv \
@@ -137,7 +137,7 @@ echo "Alignment of piRNA sequences to genome..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v $GENOME:/data/genome.fa \
-    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     ./blat /data/genome.fa /data/piRNA_db_custom.fa \
     -t=dna -q=rna -maxIntron=0 -stepSize=5 -repMatch=2253 \
     -minScore=20 -minIdentity=100 -noTrimA -out=psl \
