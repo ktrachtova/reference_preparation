@@ -11,4 +11,4 @@ This repository contains code and data for reference preparation of various proj
 ## PerSeqPIPE
 
 * `docker/` folder contains Dockerfile and Makefile that builds docker image used to prepare various databases and subsequently final custom sncRNA GTF file for PerSeqPIPE pipeline
-* `scripts/` folder contains simple scripts that prepare various databases for PerSeqPIPE pipeline as described [here](https://github.com/ktrachtova/perseqpipe/blob/main/docs/reference_databases.md)
+* `scripts/` folder contains simple scripts that prepare various databases for PerSeqPIPE pipeline as described [here](https://github.com/ktrachtova/perseqpipe/blob/main/docs/annotation_preparation.md)

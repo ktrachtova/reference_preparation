@@ -1,12 +1,14 @@
 #!/bin/bash
 # Script to create a custom rRNA database
 
+set -exo pipefail
+
 source ../config.mk
 
 # Set up project directory
 PROJECT_DIR=$(dirname "$(pwd)")
 echo "Project directory: $PROJECT_DIR"
-echo "Docker image version: $REFERENCE_PREPARATION_VERSION"
+echo "Docker image version: $REFERENCE_PREPARATION_DOCKER_VERSION"
 
 CREATE_FASTA_MMSEQS2=$(pwd)/utils/create_fasta_mmseqs2.py
 
@@ -80,7 +82,7 @@ echo "Clustering with MMseqs2..."
 
 docker run --rm \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     bash -c "
         mmseqs createdb /data/tmp.fa /data/inputDB && \
         mmseqs clusthash /data/inputDB /data/resultDB --min-seq-id 1.0 && \
@@ -95,7 +97,7 @@ echo "Generating clustered FASTA file..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v ${CREATE_FASTA_MMSEQS2}:/scripts/create_fasta_mmseqs2.py \
-    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_VERSION}" \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     python3 /scripts/create_fasta_mmseqs2.py \
         --fasta /data/tmp.fa \
         --mmseqs2_tsv /data/rRNA_cluster_result.tsv \
@@ -109,10 +111,27 @@ echo ""
 echo "-------------------------------"
 echo "Calculating final statistics..."
 
-MIN_LENGTH=$(awk '/^>/ {if (seqlen) print seqlen; seqlen=0; next} {seqlen += length($0)} END {print seqlen}' "$TMP_DIR/rRNA_db_custom.fa" | sort -n | head -n 1)
-MAX_LENGTH=$(awk '/^>/ {if (seqlen) print seqlen; seqlen=0; next} {seqlen += length($0)} END {print seqlen}' "$TMP_DIR/rRNA_db_custom.fa" | sort -n | tail -n 1)
-AVG_LENGTH=$(awk '/^>/ {if (seqlen) {sum += seqlen; count++} seqlen=0; next} {seqlen += length($0)} END {print sum/count}' "$TMP_DIR/rRNA_db_custom.fa")
-NUM_SEQ=$(grep -c "^>" "$TMP_DIR/rRNA_db_custom.fa")
+read -r MIN_LENGTH MAX_LENGTH AVG_LENGTH NUM_SEQ < <(
+awk '
+  function flush() {
+    if (seqlen>0) {
+      if (count==0 || seqlen<min) min=seqlen
+      if (count==0 || seqlen>max) max=seqlen
+      sum+=seqlen
+      count++
+      seqlen=0
+    }
+  }
+  /^>/ { flush(); next }
+  { seqlen += length($0) }
+  END {
+    flush()
+    avg = (count? sum/count : 0)
+    printf "%d %d %.6f %d\n", min, max, avg, count
+  }
+' "$TMP_DIR/rRNA_db_custom.fa"
+)
+
 
 echo "Number of rRNA sequences: $NUM_SEQ"
 echo "Minimum length: $MIN_LENGTH"

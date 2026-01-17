@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -exo pipefail
+
 # Set up project directory
 PROJECT_DIR=$(dirname $(pwd))
 echo "Project directory: $PROJECT_DIR"
@@ -39,7 +41,6 @@ mkdir -p $TMP_DIR
 
 # Script for filtering
 FILTER_GTF=$(pwd)/utils/filter_gtf.py
-
 
 # Output directory for results
 OUTPUT_DIR=${PROJECT_DIR}/reference_files/other_rna/$(date +'%Y_%m_%d')

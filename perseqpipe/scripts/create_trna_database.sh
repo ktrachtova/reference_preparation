@@ -1,6 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
+source ../config.mk
+
+# Set up project directory
+PROJECT_DIR=$(dirname "$(pwd)")
+mkdir -p "$PROJECT_DIR/databases"
+
+echo "Project directory: $PROJECT_DIR"
+echo "Docker image version: $REFERENCE_PREPARATION_DOCKER_VERSION"
+
 # -----------------------------
 # Script: create_custom_tRNA_db.sh
 # Purpose: Build a custom tRNA database
@@ -57,9 +66,6 @@ for var in DB2_FASTA1 DB2_FASTA2 DB2; do
 done
 
 # Genome file setup
-PROJECT_DIR=$(dirname "$(pwd)")
-mkdir -p "$PROJECT_DIR/databases"
-
 if [[ -z "$GENOME" ]]; then
     echo "🧬 Genome FASTA not provided. Downloading..."
     wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_47/GRCh38.primary_assembly.genome.fa.gz -O "$PROJECT_DIR/databases/genome.fa.gz"
@@ -124,7 +130,7 @@ echo "Aligning tRNA sequences to genome..."
 docker run --rm \
     -v "${TMP_DIR}:/data" \
     -v $GENOME:/data/genome.fa \
-    ktrachtok/reference_preparation:x86_64-1.0 \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     ./blat /data/genome.fa /data/mt_tRNA_db.fa \
     -t=dna -q=rna -maxIntron=10000 -stepSize=5 -repMatch=1000 \
     -minScore=20 -minIdentity=100 -noTrimA -out=psl \
@@ -138,7 +144,7 @@ echo "Converting PSL to BED"
 docker run --rm \
     -v ${PSL2BED}:/scripts/psl2bed.r \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:x86_64-1.0 \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     Rscript /scripts/psl2bed.r /data/mt_tRNA_db_genomeMap.psl /data/mt_tRNA_db_genomeMap.bed
 
 # Merge GtfRNAdb BED12 file with tRNA with created BED12 file with Mt-tRNA
@@ -152,7 +158,7 @@ echo "Converting BED to GTF"
 docker run --rm \
     -v ${BED2GTF}:/scripts/bed2gtf.py \
     -v "${TMP_DIR}:/data" \
-    ktrachtok/reference_preparation:x86_64-1.0 \
+    ktrachtok/reference_preparation:x86_64-"${REFERENCE_PREPARATION_DOCKER_VERSION}" \
     python3 /scripts/bed2gtf.py -i /data/tRNA_db_custom_genomeMap.bed -o /data/tRNA_db_custom_genomeMap.gtf --gene_feature --gene_biotype tRNA --source GtRNAdb
 
 # Length distribution of final tRNA database
@@ -167,10 +173,26 @@ cat ${TMP_DIR}/tRNA_db_custom.fa | awk 'NR%2 == 0 {lengths[length($0)]++} END {f
 
 # Calculate and print some statistics about created Mt-tRNA database
 # Calculate minimum, maximum, and average lengths
-MIN_LENGTH=$(awk '/^>/ {if (seqlen) print seqlen; seqlen=0; next} {seqlen += length($0)} END {print seqlen}' "$TMP_DIR/tRNA_db_custom.fa" | sort -n | head -n 1)
-MAX_LENGTH=$(awk '/^>/ {if (seqlen) print seqlen; seqlen=0; next} {seqlen += length($0)} END {print seqlen}' "$TMP_DIR/tRNA_db_custom.fa" | sort -n | tail -n 1)
-AVG_LENGTH=$(awk '/^>/ {if (seqlen) {sum += seqlen; count++} seqlen=0; next} {seqlen += length($0)} END {print sum/count}' "$TMP_DIR/tRNA_db_custom.fa")
-NUM_SEQ=`grep -c ">" $TMP_DIR/tRNA_db_custom.fa`
+read -r MIN_LENGTH MAX_LENGTH AVG_LENGTH NUM_SEQ < <(
+awk '
+  function flush() {
+    if (seqlen>0) {
+      if (count==0 || seqlen<min) min=seqlen
+      if (count==0 || seqlen>max) max=seqlen
+      sum+=seqlen
+      count++
+      seqlen=0
+    }
+  }
+  /^>/ { flush(); next }
+  { seqlen += length($0) }
+  END {
+    flush()
+    avg = (count? sum/count : 0)
+    printf "%d %d %.6f %d\n", min, max, avg, count
+  }
+' "$TMP_DIR/tRNA_db_custom.fa"
+)
 
 # Print the results
 echo "Number of tRNA + Mt-tRNA sequences: $NUM_SEQ"
